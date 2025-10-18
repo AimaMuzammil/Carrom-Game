@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carrom Game Advanced</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Poppins', sans-serif;
+  background:#f2e4c7;
+  display:flex; flex-direction:column; align-items:center; min-height:100vh;
+  color:#4b2e05;
+}
+
+/* Navbar */
+nav { width:100%; background:#a6754d; color:#fff; display:flex; justify-content:space-between; align-items:center; padding:15px 50px; box-shadow:0 3px 6px rgba(0,0,0,0.2); }
+nav h1{ font-size:1.5em; }
+nav ul{ list-style:none; display:flex; gap:25px; }
+nav ul li a{ color:white; text-decoration:none; font-weight:500; transition:0.3s; }
+nav ul li a:hover{ color:#ffde9f; }
+
+/* Board */
+.board { margin-top:30px; width:500px; height:500px; background:#e9cba3; border:15px solid #6b4423; border-radius:20px; position:relative; box-shadow:inset 0 0 30px rgba(0,0,0,0.2); }
+
+/* Holes */
+.hole{ width:35px; height:35px; background:#000; border-radius:50%; position:absolute; }
+.hole.tl{ top:10px; left:10px; }
+.hole.tr{ top:10px; right:10px; }
+.hole.bl{ bottom:10px; left:10px; }
+.hole.br{ bottom:10px; right:10px; }
+
+/* Coins */
+.coin{
+  width:25px; height:25px; border-radius:50%; position:absolute;
+}
+.coin.black{ background:#2e2e2e; }
+.coin.white{ background:#fff; border:2px solid #555; }
+.coin.red{ background:#c0392b; }
+
+/* Striker */
+.striker{ width:40px; height:40px; background:#4b2e05; border-radius:50%; position:absolute; bottom:30px; left:230px; cursor:pointer; z-index:10; }
+
+/* Controls */
+.controls{ margin:20px; display:flex; gap:15px; }
+button{ padding:10px 20px; background:#a6754d; border:none; border-radius:5px; color:white; font-size:1em; cursor:pointer; transition:0.3s; }
+button:hover{ background:#855632; }
+
+/* Footer */
+footer{ margin-top:auto; width:100%; text-align:center; background:#a6754d; color:#fff; padding:20px; font-size:1em; box-shadow:0 -3px 6px rgba(0,0,0,0.2); display:flex; justify-content:center; gap:20px; }
+footer button{ background:#855632; padding:8px 15px; border-radius:5px; border:none; color:#fff; cursor:pointer; transition:0.3s; }
+footer button:hover{ background:#ffde9f; color:#4b2e05; }
+
+/* Scoreboard */
+.scoreboard { margin-top:15px; font-size:1.1em; font-weight:500; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav>
+<h1>Carrom Game</h1>
+<ul>
+  <li><a href="#">Home</a></li>
+  <li><a href="#">Play Game</a></li>
+  <li><a href="#">About</a></li>
+  <li><a href="#">Contact</a></li>
+</ul>
+</nav>
+
+<!-- Scoreboard -->
+<div class="scoreboard" id="scoreboard">Black: 0 | White: 0 | Red: 0</div>
+
+<!-- Board -->
+<div class="board" id="board">
+  <div class="hole tl"></div>
+  <div class="hole tr"></div>
+  <div class="hole bl"></div>
+  <div class="hole br"></div>
+  <div class="striker" id="striker"></div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button onclick="resetBoard()">Reset</button>
+</div>
+
+<!-- Footer -->
+<footer>
+  <button onclick="alert('Choose your puck set!')">Puck Options</button>
+  <button onclick="alert('Unlock special items!')">Unlock Box</button>
+  <button onclick="alert('Join Carrom Club!')">Club Option</button>
+</footer>
+
+<script>
+// Sounds
+const strikerSound = new Audio('https://freesound.org/data/previews/341/341695_62450-lq.mp3');
+const coinSound = new Audio('https://freesound.org/data/previews/256/256113_4486188-lq.mp3');
+
+const board = document.getElementById('board');
+const striker = document.getElementById('striker');
+const scoreboard = document.getElementById('scoreboard');
+
+let coins = [];
+let score = {black:0, white:0, red:0};
+
+// Initialize coins
+function createCoins(){
+  coins = [];
+  const positions = [
+    {x:200,y:200,type:'black'},{x:200,y:260,type:'black'},{x:260,y:200,type:'black'},
+    {x:260,y:260,type:'black'},{x:230,y:230,type:'black'},{x:220,y:240,type:'black'},
+    {x:180,y:220,type:'white'},{x:180,y:250,type:'white'},{x:250,y:180,type:'white'},
+    {x:250,y:250,type:'white'},{x:230,y:200,type:'white'},{x:240,y:210,type:'white'},
+    {x:230,y:230,type:'red'}
+  ];
+  positions.forEach(pos=>{
+    const c = document.createElement('div');
+    c.className = 'coin '+pos.type;
+    c.style.left = pos.x+'px';
+    c.style.top = pos.y+'px';
+    board.appendChild(c);
+    coins.push({el:c, x:pos.x, y:pos.y, dx:0, dy:0, type:pos.type, active:true});
+  });
+}
+createCoins();
+
+// Draggable striker
+let isDragging=false, offsetX, offsetY;
+striker.addEventListener('mousedown', e=>{
+  isDragging=true;
+  const rect = striker.getBoundingClientRect();
+  offsetX=e.clientX-rect.left;
+  offsetY=e.clientY-rect.top;
+});
+document.addEventListener('mouseup', e=>{
+  if(isDragging){
+    isDragging=false;
+    shootStriker(e);
+  }
+});
+document.addEventListener('mousemove', e=>{
+  if(!isDragging) return;
+  const rect = board.getBoundingClientRect();
+  let x = e.clientX - rect.left - offsetX;
+  let y = e.clientY - rect.top - offsetY;
+  x = Math.max(0, Math.min(rect.width-striker.offsetWidth, x));
+  y = Math.max(0, Math.min(rect.height-striker.offsetHeight, y));
+  striker.style.left = x+'px';
+  striker.style.top = y+'px';
+});
+
+// Shoot striker
+function shootStriker(e){
+  strikerSound.play();
+  const rect = board.getBoundingClientRect();
+  const strikerRect = striker.getBoundingClientRect();
+  let dx = e.clientX - (strikerRect.left + strikerRect.width/2);
+  let dy = e.clientY - (strikerRect.top + strikerRect.height/2);
+  let power = Math.min(Math.sqrt(dx*dx+dy*dy)/10,15);
+
+  coins.forEach(c=>{
+    if(!c.active) return;
+    let angle = Math.random()*2*Math.PI;
+    c.dx = power*Math.cos(angle);
+    c.dy = power*Math.sin(angle);
+  });
+
+  striker.style.transition='transform 0.3s ease';
+  striker.style.transform=`translate(${dx/10}px, ${dy/10}px)`;
+  setTimeout(()=>{ striker.style.transform='translate(0,0)'; striker.style.left='230px'; striker.style.top=''; striker.style.bottom='30px'; },300);
+  animateCoins();
+}
+
+// Animate coins with simple collision to walls and pockets
+function animateCoins(){
+  const interval = setInterval(()=>{
+    let anyActive=false;
+    coins.forEach(c=>{
+      if(!c.active) return;
+      anyActive=true;
+      c.x += c.dx;
+      c.y += c.dy;
+      c.dx *=0.98; c.dy*=0.98;
+      // wall collision
+      if(c.x<=0 || c.x>=board.offsetWidth-25) c.dx*=-1;
+      if(c.y<=0 || c.y>=board.offsetHeight-25) c.dy*=-1;
+      c.el.style.left=c.x+'px';
+      c.el.style.top=c.y+'px';
+      // check pockets
+      const pockets = [{x:10,y:10},{x:455,y:10},{x:10,y:455},{x:455,y:455}];
+      pockets.forEach(p=>{
+        if(Math.hypot(c.x-p.x,c.y-p.y)<20){
+          c.active=false;
+          c.el.style.display='none';
+          coinSound.play();
+          if(c.type==='black') score.black++;
+          else if(c.type==='white') score.white++;
+          else if(c.type==='red') score.red++;
+          updateScore();
+        }
+      });
+    });
+    if(!anyActive) clearInterval(interval);
+  },20);
+}
+
+function updateScore(){
+  scoreboard.textContent=`Black: ${score.black} | White: ${score.white} | Red: ${score.red}`;
+}
+
+function resetBoard(){
+  coins.forEach(c=>c.el.remove());
+  score={black:0,white:0,red:0};
+  updateScore();
+  createCoins();
+  striker.style.left='230px'; striker.style.bottom='30px'; striker.style.top='';
+}
+</script>
+</body>
+</html>
